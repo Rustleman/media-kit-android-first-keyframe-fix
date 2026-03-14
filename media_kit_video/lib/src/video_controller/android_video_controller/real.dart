@@ -63,12 +63,13 @@ class AndroidVideoController extends PlatformVideoController {
           if (configuration.vo == 'mediacodec_embed') 'vid': 'no',
         });
       } else if (_lastAppliedWid != 0) {
-        // Android may replace the underlying Surface when resizing from the
-        // startup placeholder to the real video size. Keep the active output
-        // path alive and only retarget the new Surface.
+        // Same-surface resizes still need the active video output to re-apply
+        // against the updated surface size, but bouncing through vo=null here
+        // destabilizes Android startup.
         await setProperties({
           'android-surface-size': androidSurfaceSizeValue,
           'wid': widValue,
+          'vo': configuration.vo!,
           if (configuration.vo == 'mediacodec_embed') 'vid': 'auto',
         });
       } else {
