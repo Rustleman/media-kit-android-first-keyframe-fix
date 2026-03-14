@@ -7,8 +7,10 @@
  */
 package com.alexmercerind.media_kit_video;
 
+import android.content.res.Resources;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.DisplayMetrics;
 import android.util.Log;
 
 import java.lang.reflect.Method;
@@ -54,6 +56,9 @@ public class VideoOutput implements TextureRegistry.SurfaceProducer.Callback {
 
         surfaceProducer = textureRegistryReference.createSurfaceProducer();
         surfaceProducer.setCallback(this);
+        final DisplayMetrics displayMetrics = Resources.getSystem().getDisplayMetrics();
+        surfaceProducer.setSize(displayMetrics.widthPixels, displayMetrics.heightPixels);
+        handler.post(this::onSurfaceAvailable);
     }
 
     public void dispose() {
@@ -95,7 +100,9 @@ public class VideoOutput implements TextureRegistry.SurfaceProducer.Callback {
         synchronized (lock) {
             Log.i(TAG, "onSurfaceAvailable");
             id = surfaceProducer.id();
-            wid = newGlobalObjectRef(surfaceProducer.getSurface());
+            if (wid == 0) {
+                wid = newGlobalObjectRef(surfaceProducer.getSurface());
+            }
             textureUpdateCallback.onTextureUpdate(id, wid, surfaceProducer.getWidth(), surfaceProducer.getHeight());
         }
     }
@@ -107,6 +114,7 @@ public class VideoOutput implements TextureRegistry.SurfaceProducer.Callback {
             textureUpdateCallback.onTextureUpdate(id, 0, surfaceProducer.getWidth(), surfaceProducer.getHeight());
             if (wid != 0) {
                 final long widReference = wid;
+                wid = 0;
                 handler.postDelayed(() -> deleteGlobalObjectRef(widReference), 5000);
             }
         }

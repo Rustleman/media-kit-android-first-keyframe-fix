@@ -32,6 +32,7 @@ class AndroidVideoController extends PlatformVideoController {
 
   /// [Lock] used to synchronize [onLoadHooks], [onUnloadHooks] & [subscription].
   final lock = Lock();
+  int _lastAppliedWid = 0;
 
   NativePlayer get platform => player.platform as NativePlayer;
 
@@ -51,27 +52,37 @@ class AndroidVideoController extends PlatformVideoController {
       final width = rect.value?.width.toInt() ?? 1;
       final height = rect.value?.height.toInt() ?? 1;
       final androidSurfaceSizeValue = [width, height].join('x');
-      final widValue = wid.value?.toString() ?? '0';
-      // When --wid is 0, vo=null is required to avoid SIGSEGV.
-      final voValue = widValue == '0' ? 'null' : configuration.vo!;
-      final vidValue = widValue == '0' ? 'no' : 'auto';
-      // It is important to re-initialize --vo after --android-surface-size.
-      await setProperty('vo', 'null');
-      await setProperties(
-        {
-          // ORDER IS IMPORTANT.
+      final nextWid = wid.value ?? 0;
+      final widValue = nextWid.toString();
+
+      if (nextWid == 0) {
+        await setProperty('vo', 'null');
+        await setProperties({
           'android-surface-size': androidSurfaceSizeValue,
           'wid': widValue,
-          'vo': voValue,
-          // It is important to re-initialize --vid in-case of --vo=mediacodec_embed.
-          // Not doing so causes error "Could not open codec." & video never gets rendered.
-          if (configuration.vo == 'mediacodec_embed') 'vid': vidValue,
-        },
-      );
-      // Instead of seeking to the start (Duration.zero), seek to the current playback position
-      // without jumping the user to the start of the media.
-      final currentPosition = player.state.position;
-      await player.seek(currentPosition);
+          if (configuration.vo == 'mediacodec_embed') 'vid': 'no',
+        });
+      } else if (_lastAppliedWid != 0) {
+        // Android may replace the underlying Surface when resizing from the
+        // startup placeholder to the real video size. Keep the active output
+        // path alive and only retarget the new Surface.
+        await setProperties({
+          'android-surface-size': androidSurfaceSizeValue,
+          'wid': widValue,
+          if (configuration.vo == 'mediacodec_embed') 'vid': 'auto',
+        });
+      } else {
+        // Initial attachment still needs vo=null -> wid -> vo=gpu ordering.
+        await setProperty('vo', 'null');
+        await setProperties({
+          'android-surface-size': androidSurfaceSizeValue,
+          'wid': widValue,
+          'vo': configuration.vo!,
+          if (configuration.vo == 'mediacodec_embed') 'vid': 'auto',
+        });
+      }
+
+      _lastAppliedWid = nextWid;
     });
   }
 
